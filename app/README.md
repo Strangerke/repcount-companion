@@ -1,0 +1,35 @@
+# RepCount Companion
+
+A browser app (installable PWA) that reads the CSV export from the RepCount app and adds:
+
+- **Muscles**: average weekly sets per muscle (primary = 1 set, secondary = ½), all sets or "hard" sets only (notes containing Échec / Limite / Très lourd), plus a 16-week heatmap.
+- **Exercises**: per-exercise history, heaviest set and estimated 1RM over time, recent sessions with your notes.
+- **Reminders**: exercises done in the last *N* months but not in the last *M* months (default 8 and 2), plus the muscles you've trained noticeably less lately.
+- **Mapping**: exercise name → movement → muscles. Built-in links cover common names; your own choices are saved in the browser and can be exported/imported as JSON.
+
+All data stays in the browser (IndexedDB). There is no server and no account.
+
+## Files
+
+- `dist/`: the deployable app. `index.html` is self-contained; `manifest.webmanifest`, `sw.js` and the icons make it installable and offline-capable.
+- `src/`: sources. `core.js` holds parsing, the muscle dictionary (`MOVEMENTS`, `ALIASES`, `RULES`) and the stats; `ui.js` holds the views; `style.css` and `shell.html` are the page.
+- `build.py`: inlines `src/` into `dist/index.html` (`python build.py`).
+
+## Run locally
+
+```
+cd dist
+python -m http.server 8000
+```
+
+Then open http://localhost:8000. Opening `index.html` directly also works, but the service worker (offline mode, install, share target) only runs over http(s).
+
+## Deploy (free) so it installs on Android
+
+Push `dist/` to GitHub Pages, Netlify or Cloudflare Pages, open the URL in Chrome on your phone, then use **Add to Home screen / Install app**.
+
+Once it's installed, go to RepCount → Statistics → ⋮ → export CSV → **Share** → *RepCount Companion*. The file is imported directly through the Web Share Target in `manifest.webmanifest` and `sw.js`.
+
+## Extending the dictionary
+
+Add names to `ALIASES` in `src/core.js`. Names are normalised first: lower-case, no accents, digits and punctuation removed, so "Shoulder press 28" becomes `shoulder press`. Add new movements to `MOVEMENTS` and keyword fallbacks to `RULES`.
