@@ -214,6 +214,16 @@ function parseNote(note) {
 }
 const HARD = { failure: 1, limit: 1, very_heavy: 1 };
 
+// Set type: the "Set type" column (newer exports), else older notes such as "Drop set" or "Échauffement".
+// Warm-up sets are kept for display but left out of volume, hard sets, best set and 1RM.
+const SET_KIND_LABEL = { warmup: 'Warm-up', drop: 'Drop set' };
+function setKind(type, note) {
+  const t = stripAccents(String(type || '').toLowerCase()), n = stripAccents(String(note || '').toLowerCase()).trim();
+  if (/warm|echauf/.test(t) || /^(warm|echauf)/.test(n)) return 'warmup';
+  if (/drop|degress/.test(t) || /^(drop|degress)/.test(n)) return 'drop';
+  return 'normal';
+}
+
 // ---------- CSV ----------
 function parseCSV(text) {
   if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
@@ -241,7 +251,7 @@ function parseDate(s) { // "2026-11-08 10:29" local time
 }
 const num = s => { const v = parseFloat(String(s).replace(',', '.')); return isFinite(v) ? v : null; };
 
-const EXPECTED = ['Workout Start', 'Workout End', 'Exercise', 'Weight', 'Reps', 'Notes', 'Kcal', 'Distance', 'Duration', 'Category', 'Name'];
+const EXPECTED = ['Workout Start', 'Workout End', 'Exercise', 'Weight', 'Reps', 'Notes', 'Kcal', 'Distance', 'Duration', 'Category', 'Name', 'Bodyweight', 'Set type'];
 
 // Returns { sets, problems }
 function loadExport(text) {
@@ -260,13 +270,14 @@ function loadExport(text) {
     if (!start || !ex) { skipped++; continue; }
     const note = g(r, 'Notes').trim();
     const { effort, levelUp } = parseNote(note);
+    const kind = setKind(g(r, 'Set type'), note);
     sets.push({
       start, end: parseDate(g(r, 'Workout End')) || start,
       ex, key: ex.toLowerCase(),
       w: num(g(r, 'Weight')), r: num(g(r, 'Reps')),
-      note, effort, levelUp,
+      note, effort, levelUp, kind,
       cat: g(r, 'Category').trim(),
-      kcal: num(g(r, 'Kcal')), dist: num(g(r, 'Distance')), dur: num(g(r, 'Duration')),
+      kcal: num(g(r, 'Kcal')), dist: num(g(r, 'Distance')), dur: num(g(r, 'Duration')), bw: num(g(r, 'Bodyweight')),
     });
   }
   sets.sort((a, b) => a.start - b.start);
@@ -295,13 +306,15 @@ function exerciseStats(sets, userMap) {
   const map = new Map();
   for (const s of sets) {
     let e = map.get(s.key);
-    if (!e) { e = { key: s.key, name: s.ex, cat: s.cat, sets: 0, sessions: new Map(), first: s.start, last: s.start, best: null, bestE1rm: null, levelUps: 0, hard: 0 }; map.set(s.key, e); }
-    e.name = s.ex; e.cat = s.cat || e.cat; e.sets++; e.last = Math.max(e.last, s.start);
-    if (s.levelUp) e.levelUps++;
-    if (HARD[s.effort]) e.hard++;
+    if (!e) { e = { key: s.key, name: s.ex, cat: s.cat, sets: 0, sessions: new Map(), first: s.start, last: s.start, best: null, bestE1rm: null, levelUps: 0, hard: 0, warmups: 0 }; map.set(s.key, e); }
+    e.name = s.ex; e.cat = s.cat || e.cat; e.last = Math.max(e.last, s.start);
     let ss = e.sessions.get(s.start);
     if (!ss) { ss = { t: s.start, top: null, e1rm: null, sets: [] }; e.sessions.set(s.start, ss); }
     ss.sets.push(s);
+    if (s.kind === 'warmup') { e.warmups++; continue; }
+    e.sets++;
+    if (s.levelUp) e.levelUps++;
+    if (HARD[s.effort]) e.hard++;
     if (s.w != null && (ss.top == null || s.w > ss.top.w || (s.w === ss.top.w && s.r > ss.top.r))) ss.top = s;
     const x = e1rm(s.w, s.r);
     if (x != null && (ss.e1rm == null || x > ss.e1rm)) ss.e1rm = x;
@@ -318,6 +331,7 @@ function muscleWeekly(sets, userMap, from, to, metric) {
   const weeks = new Map(); let excluded = 0;
   for (const s of sets) {
     if (s.start < from || s.start >= to) continue;
+    if (s.kind === 'warmup') continue;
     if (metric === 'hard' && !HARD[s.effort]) continue;
     const res = cache[s.key] || (cache[s.key] = resolve(s.ex, userMap));
     if (res.cardio) continue;
@@ -373,7 +387,7 @@ function anomalies(sets) {
   return out.sort((a, b) => b.set.start - a.set.start);
 }
 
-const api = { anomalies, MUSCLE_TIPS, MUSCLE_GROUPS, MUSCLES, MUSCLE_LABEL, MUSCLE_GROUP, MOVEMENTS, ALIASES, EFFORT_LABEL, HARD,
+const api = { anomalies, MUSCLE_TIPS, MUSCLE_GROUPS, MUSCLES, MUSCLE_LABEL, MUSCLE_GROUP, MOVEMENTS, ALIASES, EFFORT_LABEL, HARD, SET_KIND_LABEL, setKind,
   normName, suggestMovement, resolve, parseNote, parseCSV, loadExport, workouts, exerciseStats, muscleWeekly, forgotten,
   weekStart, addMonths, e1rm, DAY };
 if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.RC = api;

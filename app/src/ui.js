@@ -184,7 +184,8 @@ const muscleChips = res => {
   return res.p.map(m => `<span class="chip p">${RC.MUSCLE_LABEL[m]}</span>`).join('') + res.s.map(m => `<span class="chip">${RC.MUSCLE_LABEL[m]}</span>`).join('');
 };
 const setStr = s => (s.w != null && s.w > 0 ? `${fmtNum(s.w, 1)}×${fmtNum(s.r)}` : s.r != null ? `${fmtNum(s.r)} reps` : (s.dur ? `${Math.round(s.dur / 60)} min` : '–'));
-const sessionStr = ss => ss.sets.map(s => setStr(s) + (s.effort ? ` <span class="muted">(${RC.EFFORT_LABEL[s.effort]})</span>` : '') + (s.levelUp ? ' ⬆' : '')).join(' · ');
+const kindTag = s => (RC.SET_KIND_LABEL[s.kind] ? ` <span class="muted">[${RC.SET_KIND_LABEL[s.kind]}]</span>` : '');
+const sessionStr = ss => ss.sets.map(s => setStr(s) + kindTag(s) + (s.effort ? ` <span class="muted">(${RC.EFFORT_LABEL[s.effort]})</span>` : '') + (s.levelUp ? ' ⬆' : '')).join(' · ');
 const movementName = id => id === 'custom' ? 'Custom' : (RC.MOVEMENTS[id] ? RC.MOVEMENTS[id].name : '–');
 
 // ---------- Views ----------
@@ -341,10 +342,10 @@ function exerciseDetail(e) {
     { name: 'Heaviest set', color: 'var(--accent)', values: ss.map(s => s.top && s.top.w > 0 ? s.top.w : null) },
     { name: 'Estimated 1RM', color: 'var(--series-2)', values: ss.map(s => s.e1rm) },
   ], { unit: u });
-  const id = Object.keys(lineData).pop(); if (lineData[id]) lineData[id].extra = i => `<br><span style="opacity:.8">${ss[i].sets.map(setStr).join(' · ')}</span>`;
+  const id = Object.keys(lineData).pop(); if (lineData[id]) lineData[id].extra = i => `<br><span style="opacity:.8">${ss[i].sets.map(s => setStr(s) + kindTag(s)).join(' · ')}</span>`;
   const recent = ss.slice(-8).reverse();
   return `<div class="card"><div class="row"><h3 style="margin:0">${esc(e.name)}</h3><button id="closeEx">Close</button></div>
-  <p class="small t2" style="margin:4px 0 12px">${movementName(e.res.movement)} · ${muscleChips(e.res)}<br>${ss.length} sessions · ${e.sets} sets · ${e.hard} hard sets · ${e.levelUps} level-ups · first done ${fmtDate(e.first)}</p>
+  <p class="small t2" style="margin:4px 0 12px">${movementName(e.res.movement)} · ${muscleChips(e.res)}<br>${ss.length} sessions · ${e.sets} sets${e.warmups ? ` (+${e.warmups} warm-up)` : ''} · ${e.hard} hard sets · ${e.levelUps} level-ups · first done ${fmtDate(e.first)}</p>
   ${chart}
   <p class="muted small">Estimated 1RM uses the Epley formula on sets of 15 reps or fewer (less precise above ~10 reps, fine for trends). Machine weights only compare within the same machine.</p>
   <h3 style="margin-top:14px">Recent sessions</h3><div class="list small">${recent.map(s => `<div><b>${fmtDate(s.t)}</b> — ${sessionStr(s)}</div>`).join('')}</div></div>`;
@@ -413,7 +414,7 @@ function data() {
   return `<h2>Your data</h2><p class="sub">Everything stays in this browser: nothing is uploaded anywhere.</p>
   <div class="grid2">
   <div class="card"><h3>${has ? 'Update your export' : 'Load your RepCount export'}</h3>
-    <div class="drop" id="drop"><p style="margin:0 0 10px">Drop <b>repcount_csv_export.csv</b> here, or</p><label class="btn primary">Choose file<input type="file" id="file" accept=".csv,text/csv,text/plain" hidden></label></div>
+    <div class="drop" id="drop"><p style="margin:0 0 10px">Drop your RepCount <b>CSV export</b> here, or</p><label class="btn primary">Choose file<input type="file" id="file" accept=".csv,text/csv,text/plain" hidden></label></div>
     ${has ? `<p class="small t2">Loaded: <b>${esc(S.fileName)}</b> — ${fmtNum(S.sets.length)} sets, ${fmtNum(S.wos.length)} workouts, imported ${fmtDate(S.importedAt)}. A new file replaces it (the export always holds your full history).</p>` : ''}
     <p class="small t2"><b>How to export:</b> in RepCount, open the <b>Statistics</b> tab, tap the menu (⋮) at the top right and choose the CSV export (Premium). On Android, if this app is installed, you can share the file straight to it.</p>
   </div>

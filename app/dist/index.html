@@ -370,6 +370,16 @@ function parseNote(note) {
 }
 const HARD = { failure: 1, limit: 1, very_heavy: 1 };
 
+// Set type: the "Set type" column (newer exports), else older notes such as "Drop set" or "Échauffement".
+// Warm-up sets are kept for display but left out of volume, hard sets, best set and 1RM.
+const SET_KIND_LABEL = { warmup: 'Warm-up', drop: 'Drop set' };
+function setKind(type, note) {
+  const t = stripAccents(String(type || '').toLowerCase()), n = stripAccents(String(note || '').toLowerCase()).trim();
+  if (/warm|echauf/.test(t) || /^(warm|echauf)/.test(n)) return 'warmup';
+  if (/drop|degress/.test(t) || /^(drop|degress)/.test(n)) return 'drop';
+  return 'normal';
+}
+
 // ---------- CSV ----------
 function parseCSV(text) {
   if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
@@ -397,7 +407,7 @@ function parseDate(s) { // "2026-11-08 10:29" local time
 }
 const num = s => { const v = parseFloat(String(s).replace(',', '.')); return isFinite(v) ? v : null; };
 
-const EXPECTED = ['Workout Start', 'Workout End', 'Exercise', 'Weight', 'Reps', 'Notes', 'Kcal', 'Distance', 'Duration', 'Category', 'Name'];
+const EXPECTED = ['Workout Start', 'Workout End', 'Exercise', 'Weight', 'Reps', 'Notes', 'Kcal', 'Distance', 'Duration', 'Category', 'Name', 'Bodyweight', 'Set type'];
 
 // Returns { sets, problems }
 function loadExport(text) {
@@ -416,13 +426,14 @@ function loadExport(text) {
     if (!start || !ex) { skipped++; continue; }
     const note = g(r, 'Notes').trim();
     const { effort, levelUp } = parseNote(note);
+    const kind = setKind(g(r, 'Set type'), note);
     sets.push({
       start, end: parseDate(g(r, 'Workout End')) || start,
       ex, key: ex.toLowerCase(),
       w: num(g(r, 'Weight')), r: num(g(r, 'Reps')),
-      note, effort, levelUp,
+      note, effort, levelUp, kind,
       cat: g(r, 'Category').trim(),
-      kcal: num(g(r, 'Kcal')), dist: num(g(r, 'Distance')), dur: num(g(r, 'Duration')),
+      kcal: num(g(r, 'Kcal')), dist: num(g(r, 'Distance')), dur: num(g(r, 'Duration')), bw: num(g(r, 'Bodyweight')),
     });
   }
   sets.sort((a, b) => a.start - b.start);
@@ -451,13 +462,15 @@ function exerciseStats(sets, userMap) {
   const map = new Map();
   for (const s of sets) {
     let e = map.get(s.key);
-    if (!e) { e = { key: s.key, name: s.ex, cat: s.cat, sets: 0, sessions: new Map(), first: s.start, last: s.start, best: null, bestE1rm: null, levelUps: 0, hard: 0 }; map.set(s.key, e); }
-    e.name = s.ex; e.cat = s.cat || e.cat; e.sets++; e.last = Math.max(e.last, s.start);
-    if (s.levelUp) e.levelUps++;
-    if (HARD[s.effort]) e.hard++;
+    if (!e) { e = { key: s.key, name: s.ex, cat: s.cat, sets: 0, sessions: new Map(), first: s.start, last: s.start, best: null, bestE1rm: null, levelUps: 0, hard: 0, warmups: 0 }; map.set(s.key, e); }
+    e.name = s.ex; e.cat = s.cat || e.cat; e.last = Math.max(e.last, s.start);
     let ss = e.sessions.get(s.start);
     if (!ss) { ss = { t: s.start, top: null, e1rm: null, sets: [] }; e.sessions.set(s.start, ss); }
     ss.sets.push(s);
+    if (s.kind === 'warmup') { e.warmups++; continue; }
+    e.sets++;
+    if (s.levelUp) e.levelUps++;
+    if (HARD[s.effort]) e.hard++;
     if (s.w != null && (ss.top == null || s.w > ss.top.w || (s.w === ss.top.w && s.r > ss.top.r))) ss.top = s;
     const x = e1rm(s.w, s.r);
     if (x != null && (ss.e1rm == null || x > ss.e1rm)) ss.e1rm = x;
@@ -474,17 +487,15 @@ function muscleWeekly(sets, userMap, from, to, metric) {
   const weeks = new Map(); let excluded = 0;
   for (const s of sets) {
     if (s.start < from || s.start >= to) continue;
+    if (s.kind === 'warmup') continue;
     if (metric === 'hard' && !HARD[s.effort]) continue;
     const res = cache[s.key] || (cache[s.key] = resolve(s.ex, userMap));
     if (res.cardio) continue;
     if (!res.p.length) { excluded++; continue; }
     const wk = weekStart(s.start);
     let row = weeks.get(wk); if (!row) { row = {}; weeks.set(wk, row); }
-    const gc = {};
-    for (const m of res.p) { row[m] = (row[m] || 0) + 1; gc[MUSCLE_GROUP[m]] = 1; }
-    for (const m of res.s) { row[m] = (row[m] || 0) + 0.5; const g = MUSCLE_GROUP[m]; gc[g] = Math.max(gc[g] || 0, 0.5); }
-    // Per body area, a set counts once: 1 if it hits a primary muscle there, else 0.5
-    for (const g in gc) row['g:' + g] = (row['g:' + g] || 0) + gc[g];
+    for (const m of res.p) row[m] = (row[m] || 0) + 1;
+    for (const m of res.s) row[m] = (row[m] || 0) + 0.5;
   }
   return { weeks, excluded };
 }
@@ -532,7 +543,7 @@ function anomalies(sets) {
   return out.sort((a, b) => b.set.start - a.set.start);
 }
 
-const api = { anomalies, MUSCLE_TIPS, MUSCLE_GROUPS, MUSCLES, MUSCLE_LABEL, MUSCLE_GROUP, MOVEMENTS, ALIASES, EFFORT_LABEL, HARD,
+const api = { anomalies, MUSCLE_TIPS, MUSCLE_GROUPS, MUSCLES, MUSCLE_LABEL, MUSCLE_GROUP, MOVEMENTS, ALIASES, EFFORT_LABEL, HARD, SET_KIND_LABEL, setKind,
   normName, suggestMovement, resolve, parseNote, parseCSV, loadExport, workouts, exerciseStats, muscleWeekly, forgotten,
   weekStart, addMonths, e1rm, DAY };
 if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.RC = api;
@@ -726,7 +737,8 @@ const muscleChips = res => {
   return res.p.map(m => `<span class="chip p">${RC.MUSCLE_LABEL[m]}</span>`).join('') + res.s.map(m => `<span class="chip">${RC.MUSCLE_LABEL[m]}</span>`).join('');
 };
 const setStr = s => (s.w != null && s.w > 0 ? `${fmtNum(s.w, 1)}×${fmtNum(s.r)}` : s.r != null ? `${fmtNum(s.r)} reps` : (s.dur ? `${Math.round(s.dur / 60)} min` : '–'));
-const sessionStr = ss => ss.sets.map(s => setStr(s) + (s.effort ? ` <span class="muted">(${RC.EFFORT_LABEL[s.effort]})</span>` : '') + (s.levelUp ? ' ⬆' : '')).join(' · ');
+const kindTag = s => (RC.SET_KIND_LABEL[s.kind] ? ` <span class="muted">[${RC.SET_KIND_LABEL[s.kind]}]</span>` : '');
+const sessionStr = ss => ss.sets.map(s => setStr(s) + kindTag(s) + (s.effort ? ` <span class="muted">(${RC.EFFORT_LABEL[s.effort]})</span>` : '') + (s.levelUp ? ' ⬆' : '')).join(' · ');
 const movementName = id => id === 'custom' ? 'Custom' : (RC.MOVEMENTS[id] ? RC.MOVEMENTS[id].name : '–');
 
 // ---------- Views ----------
@@ -883,10 +895,10 @@ function exerciseDetail(e) {
     { name: 'Heaviest set', color: 'var(--accent)', values: ss.map(s => s.top && s.top.w > 0 ? s.top.w : null) },
     { name: 'Estimated 1RM', color: 'var(--series-2)', values: ss.map(s => s.e1rm) },
   ], { unit: u });
-  const id = Object.keys(lineData).pop(); if (lineData[id]) lineData[id].extra = i => `<br><span style="opacity:.8">${ss[i].sets.map(setStr).join(' · ')}</span>`;
+  const id = Object.keys(lineData).pop(); if (lineData[id]) lineData[id].extra = i => `<br><span style="opacity:.8">${ss[i].sets.map(s => setStr(s) + kindTag(s)).join(' · ')}</span>`;
   const recent = ss.slice(-8).reverse();
   return `<div class="card"><div class="row"><h3 style="margin:0">${esc(e.name)}</h3><button id="closeEx">Close</button></div>
-  <p class="small t2" style="margin:4px 0 12px">${movementName(e.res.movement)} · ${muscleChips(e.res)}<br>${ss.length} sessions · ${e.sets} sets · ${e.hard} hard sets · ${e.levelUps} level-ups · first done ${fmtDate(e.first)}</p>
+  <p class="small t2" style="margin:4px 0 12px">${movementName(e.res.movement)} · ${muscleChips(e.res)}<br>${ss.length} sessions · ${e.sets} sets${e.warmups ? ` (+${e.warmups} warm-up)` : ''} · ${e.hard} hard sets · ${e.levelUps} level-ups · first done ${fmtDate(e.first)}</p>
   ${chart}
   <p class="muted small">Estimated 1RM uses the Epley formula on sets of 15 reps or fewer (less precise above ~10 reps, fine for trends). Machine weights only compare within the same machine.</p>
   <h3 style="margin-top:14px">Recent sessions</h3><div class="list small">${recent.map(s => `<div><b>${fmtDate(s.t)}</b> — ${sessionStr(s)}</div>`).join('')}</div></div>`;
@@ -955,7 +967,7 @@ function data() {
   return `<h2>Your data</h2><p class="sub">Everything stays in this browser: nothing is uploaded anywhere.</p>
   <div class="grid2">
   <div class="card"><h3>${has ? 'Update your export' : 'Load your RepCount export'}</h3>
-    <div class="drop" id="drop"><p style="margin:0 0 10px">Drop <b>repcount_csv_export.csv</b> here, or</p><label class="btn primary">Choose file<input type="file" id="file" accept=".csv,text/csv,text/plain" hidden></label></div>
+    <div class="drop" id="drop"><p style="margin:0 0 10px">Drop your RepCount <b>CSV export</b> here, or</p><label class="btn primary">Choose file<input type="file" id="file" accept=".csv,text/csv,text/plain" hidden></label></div>
     ${has ? `<p class="small t2">Loaded: <b>${esc(S.fileName)}</b> — ${fmtNum(S.sets.length)} sets, ${fmtNum(S.wos.length)} workouts, imported ${fmtDate(S.importedAt)}. A new file replaces it (the export always holds your full history).</p>` : ''}
     <p class="small t2"><b>How to export:</b> in RepCount, open the <b>Statistics</b> tab, tap the menu (⋮) at the top right and choose the CSV export (Premium). On Android, if this app is installed, you can share the file straight to it.</p>
   </div>
