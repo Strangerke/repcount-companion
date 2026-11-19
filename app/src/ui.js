@@ -274,7 +274,7 @@ function muscles() {
   const rows = RC.MUSCLES.map(id => ({ id, label: RC.MUSCLE_LABEL[id] }));
   return `${unmappedBanner()}
   <h2>Muscle volume</h2>
-  <p class="sub">Sets per muscle, counting 1 for a primary muscle and ½ for a secondary one. “Hard sets” are sets whose note says Échec, Limite or Très lourd. Click a muscle to see which exercises train it.</p>
+  <p class="sub">Sets per muscle, counting 1 for a primary muscle and ½ for a secondary one. “Hard sets” are sets whose note says Failure, Failure or Very Heavy (or in French: Échec, Limite or Très lourd). Click a muscle to see which exercises train it.</p>
   <div class="controls">
     <span class="seg" id="period">${P.map(([k, l]) => `<button data-v="${k}" class="${String(S.settings.period) === String(k) ? 'on' : ''}">${l}</button>`).join('')}</span>
     <span class="seg" id="metric"><button data-v="sets" class="${metric === 'sets' ? 'on' : ''}">All sets</button><button data-v="hard" class="${metric === 'hard' ? 'on' : ''}">Hard sets</button></span>
