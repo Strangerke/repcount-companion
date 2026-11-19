@@ -10,6 +10,7 @@ A browser app (installable PWA) that reads the CSV export from the RepCount app 
 All data stays in the browser (IndexedDB). There is no server and no account.
 
 ## Files
+Everything sits in the App folder.
 
 - `dist/`: the deployable app. `index.html` is self-contained; `manifest.webmanifest`, `sw.js` and the icons make it installable and offline-capable.
 - `src/`: sources. `core.js` holds parsing, the muscle dictionary (`MOVEMENTS`, `ALIASES`, `RULES`) and the stats; `ui.js` holds the views; `style.css` and `shell.html` are the page.
