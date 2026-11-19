@@ -37,8 +37,9 @@ Add names to `ALIASES` in `src/core.js`. Names are normalised first: lower-case,
 
 ## Why This app?
 
-I created this app for 2 things: First because I needed a couple of feature in a gym app I use for many years, obviously, but also to test AI (Claude, not to name it).
-I take no credit for anything, I coded nothing myself, but the result is workign pretty well so I decided to put it online just in case another gym dude or dudette using the same app was missing a couple of features.
+I created this app for two reasons: first, because I needed a couple of features that were missing from a gym app I have been using for many years, and second, to test AI (Claude, not to name it).
+
+I take no credit for anything, I coded nothing myself, but the result is working pretty well, so I decided to put it online just in case another gym dude or dudette using the same app was missing those same features.
 
 ## License
 
